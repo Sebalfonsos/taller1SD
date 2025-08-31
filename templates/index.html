@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CecarArticulo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>CecarArticulo</h1>
+        
+        <form id="textoForm">
+            <div class="form-group">
+                <label for="textoInput">Escribe algo:</label>
+                <input type="text" id="textoInput" name="texto_input" 
+                       placeholder="Escribe tu texto aquí..." required>
+            </div>
+            
+            <button type="submit" class="btn">Enviar</button>
+        </form>
+        
+        <div id="resultado" class="resultado"></div>
+
+        <!-- Barra de progreso -->
+        <div id="progresoContainer" style="display:none; margin-top:20px;">
+            <label for="progresoBar">Progreso:</label>
+            <progress id="progresoBar" value="0" max="100" style="width:100%;"></progress>
+            <span id="progresoTexto"></span>
+        </div>
+    </div>
+
+    <script>
+        let totalEntradas = 0;
+        let progresoInterval = null;
+
+        async function actualizarProgreso() {
+            try {
+                const resp = await fetch('/progreso');
+                const data = await resp.json();
+                const procesados = data.total_procesados || 0;
+                const bar = document.getElementById('progresoBar');
+                const texto = document.getElementById('progresoTexto');
+                bar.value = procesados;
+                texto.textContent = `${procesados} / ${totalEntradas}`;
+                if (procesados >= totalEntradas) {
+                    clearInterval(progresoInterval);
+                }
+            } catch (e) {
+                // Ignorar errores de red
+            }
+        }
+
+        document.getElementById('textoForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const resultadoDiv = document.getElementById('resultado');
+            resultadoDiv.innerHTML = '<p>Enviando...</p>';
+            document.getElementById('progresoContainer').style.display = 'none';
+            clearInterval(progresoInterval);
+
+            try {
+                const response = await fetch('/enviar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    totalEntradas = data.texto;
+                    resultadoDiv.innerHTML = `
+                        <p class="success">✅ ${data.message}</p>
+                        <p><strong>La cantidad de entradas recibidas es:</strong> ${data.texto}</p>
+                    `;
+                    // Mostrar barra y empezar a actualizar
+                    const bar = document.getElementById('progresoBar');
+                    bar.max = totalEntradas;
+                    bar.value = 0;
+                    document.getElementById('progresoTexto').textContent = `0 / ${totalEntradas}`;
+                    document.getElementById('progresoContainer').style.display = '';
+                    progresoInterval = setInterval(actualizarProgreso, 1000);
+                } else {
+                    resultadoDiv.innerHTML = `<p class="error">❌ ${data.message}</p>`;
+                }
+                
+            } catch (error) {
+                resultadoDiv.innerHTML = `<p class="error">❌ Error de conexión</p>`;
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html>
