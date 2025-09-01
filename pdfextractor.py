@@ -30,6 +30,3 @@ def extract_text_and_images(pdf_path, output_folder="output"):
 
     doc.close()
     print(f"Extraction completed! Files saved in {output_folder}")
-
-# Ejemplo de uso
-extract_text_and_images("example.pdf")
