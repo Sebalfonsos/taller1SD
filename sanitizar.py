@@ -30,8 +30,5 @@ def sanitizar_nombre_archivo(nombre):
         hash_suffix = hashlib.md5(nombre.encode()).hexdigest()[:8]
         nombre = nombre[:95] + '_' + hash_suffix
     
-    # Asegurar extensión .pdf
-    if not nombre.lower().endswith('.pdf'):
-        nombre += '.pdf'
     
     return nombre
