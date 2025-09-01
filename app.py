@@ -8,6 +8,7 @@ import multiprocessing as mp
 import json
 from sanitizar import sanitizar_nombre_archivo
 from dbmongo import guardarEntrada
+from pdfextractor import extract_text_and_images
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -41,6 +42,7 @@ def procesar_entrada(item, contador, lock):
         contador.value += 1
 
     item['rutacarpeta'] = carpetaDestino
+    extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
     guardarEntrada(item)
     return True
 
