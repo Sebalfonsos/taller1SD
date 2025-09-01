@@ -7,7 +7,7 @@ from queue import Queue
 import multiprocessing as mp
 import json
 from sanitizar import sanitizar_nombre_archivo
-
+from dbmongo import guardarEntrada
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -19,6 +19,7 @@ contador = mp.Value('i', 0)  # entero compartido
 lock = mp.Lock()
 elementos = []
 procesos = []
+
 # Función que procesará cada elemento de la cola
 def procesar_entrada(item, contador, lock):
     """Función que será ejecutada por cada proceso para procesar una entrada"""
@@ -26,14 +27,21 @@ def procesar_entrada(item, contador, lock):
     
     # Sanitizar el nombre del archivo antes de usarlo
     nombre_archivo_sanitizado = sanitizar_nombre_archivo(item['titulo'])
-    ruta_destino = os.path.join(item['rutacarpeta'], nombre_archivo_sanitizado)
+    
+    carpetaDestino = os.path.join(item['rutacarpeta'], nombre_archivo_sanitizado)
+    os.makedirs(carpetaDestino, exist_ok=True)
+    nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
+    ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
     
     print(f"[PID: {pid}] Ruta: {ruta_destino}")
     
     # Pasar tanto la URL como el nombre del archivo a la función de descarga
-    descargar_archivo(item['pdf_url'], ruta_destino)
+    rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
     with lock:  # evitar condiciones de carrera
         contador.value += 1
+
+    item['rutacarpeta'] = carpetaDestino
+    guardarEntrada(item)
     return True
 
 @app.route('/progreso')
@@ -115,10 +123,10 @@ def recibir_datos():
         cantidadTotalEntradas = len(elementos)
         print(f"Cantidad de entradas: {cantidadTotalEntradas}")
 
-        # 👉 Lanzar el procesamiento en segundo plano
+        # Lanzar el procesamiento en segundo plano
         mp.Process(target=lanzar_procesos, args=(elementos, contador, lock)).start()
 
-        # 👉 Responder inmediatamente
+        # Responder inmediatamente
         return jsonify({
             'status': 'success',
             'message': 'Procesamiento iniciado',
