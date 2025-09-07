@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultados</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .card { border:1px solid #ddd; padding:15px; margin:10px; border-radius:8px; }
+        .imagenes img { max-width:120px; margin:5px; }
+        .pagination { margin:20px; }
+        .pagination a { margin: 0 5px; text-decoration:none; }
+    </style>
+</head>
+<body>
+    <h1>Resultados</h1>
+
+    {% for item in resultados %}
+        <div class="card">
+            <h2>{{ item.titulo }}</h2>
+            <p><b>Fecha:</b> {{ item.fecha_publicacion }}</p>
+            <p><b>Autores:</b> {{ ", ".join(item.autores) }}</p>
+            <p><b>Resumen:</b> {{ item.resumen }}</p>
+
+            {% if item.imagenes_extraidas %}
+                <div class="imagenes">
+                    {% for img in item.imagenes_extraidas %}
+                        <img src="{{ img.replace('downloads', '/downloads') }}" alt="Imagen">
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <a href="{{ url_for('ver_articulo', id=item._id) }}">
+                <button>Ver Artículo completo</button>
+            </a>
+        </div>
+    {% endfor %}
+
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('listar_resultados', page=page-1) }}">Anterior</a>
+        {% endif %}
+        Página {{ page }} de {{ total_pages }}
+        {% if page < total_pages %}
+            <a href="{{ url_for('listar_resultados', page=page+1) }}">Siguiente</a>
+        {% endif %}
+    </div>
+</body>
+</html>
+    
