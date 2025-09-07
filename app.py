@@ -9,6 +9,8 @@ import json
 from sanitizar import sanitizar_nombre_archivo
 from dbmongo import guardarEntrada
 from pdfextractor import extract_text_and_images
+import requests
+import io
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -21,6 +23,11 @@ lock = mp.Lock()
 elementos = []
 procesos = []
 
+def almacenarEnMemoria(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    return io.BytesIO(response.content)
+
 # Función que procesará cada elemento de la cola
 def procesar_entrada(item, contador, lock):
     """Función que será ejecutada por cada proceso para procesar una entrada"""
@@ -31,18 +38,22 @@ def procesar_entrada(item, contador, lock):
     
     carpetaDestino = os.path.join(item['rutacarpeta'], nombre_archivo_sanitizado)
     os.makedirs(carpetaDestino, exist_ok=True)
-    nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
-    ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
+    # nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
+    # ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
     
-    print(f"[PID: {pid}] Ruta: {ruta_destino}")
-    
+    # print(f"[PID: {pid}] Ruta: {ruta_destino}")
+    print(f"[PID: {pid}] Procesando en memoria...")
+
+    pdf_buffer = almacenarEnMemoria(item['pdf_url'])
     # Pasar tanto la URL como el nombre del archivo a la función de descarga
-    rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
+    # rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
+
     with lock:  # evitar condiciones de carrera
         contador.value += 1
 
     item['rutacarpeta'] = carpetaDestino
-    extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
+    # extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
+    extract_text_and_images(pdf_buffer, item['rutacarpeta'])
     guardarEntrada(item)
     return True
 

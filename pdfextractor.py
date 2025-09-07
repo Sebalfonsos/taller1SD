@@ -5,7 +5,11 @@ def extract_text_and_images(pdf_path, output_folder="output"):
     # Crear carpeta si no existe
     os.makedirs(output_folder, exist_ok=True)
     
-    doc = fitz.open(pdf_path)
+    # doc = fitz.open(pdf_path)
+    if isinstance(pdf_path, str):
+        doc = fitz.open(pdf_path)
+    else:  # BytesIO
+        doc = fitz.open(stream=pdf_path, filetype="pdf")
     all_text = []  # acumulador de texto
 
     # Extraer texto e imágenes página por página
