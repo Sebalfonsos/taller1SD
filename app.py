@@ -26,9 +26,22 @@ elementos = []
 procesos = []
 
 def almacenarEnMemoria(url):
-    response = requests.get(url)
-    response.raise_for_status()
-    return io.BytesIO(response.content)
+    try:
+        # Hacemos un HEAD primero para no bajar todo el PDF si no existe
+        head = requests.head(url, allow_redirects=True, timeout=10)
+        if head.status_code != 200:
+            print(f"⚠️ URL no válida (status {head.status_code}): {url}")
+            return None
+
+        # Si pasa, descargamos
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return io.BytesIO(response.content)
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error descargando {url}: {e}")
+        return None
+
 
 # Función que procesará cada elemento de la cola
 def procesar_entrada(item, contador, lock):
