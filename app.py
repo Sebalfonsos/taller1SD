@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify
+from flask import send_from_directory
 from datetime import datetime
 from descargar import descargar_archivo
 import os
@@ -53,9 +54,18 @@ def procesar_entrada(item, contador, lock):
 
     item['rutacarpeta'] = carpetaDestino
     # extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
-    extract_text_and_images(pdf_buffer, item['rutacarpeta'])
+    pdfdata = extract_text_and_images(pdf_buffer, item['rutacarpeta'])
+    item['texto_extraido'] = pdfdata['texto']
+    item['imagenes_extraidas'] = pdfdata['imagenes']
+    print(f"[PID: {pid}] Extracción completada. Guardando en DB...")
     guardarEntrada(item)
+    pdf_buffer.close()
     return True
+
+
+@app.route('/downloads/<path:filename>')
+def serve_downloads(filename):
+    return send_from_directory("downloads", filename)
 
 @app.route('/progreso')
 def obtener_progreso():
