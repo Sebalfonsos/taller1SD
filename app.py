@@ -8,10 +8,11 @@ from queue import Queue
 import multiprocessing as mp
 import json
 from sanitizar import sanitizar_nombre_archivo
-from dbmongo import guardarEntrada
+from dbmongo import guardarEntrada, get_all_paginated, get_count, get_by_id
 from pdfextractor import extract_text_and_images
 import requests
 import io
+import math
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -62,6 +63,26 @@ def procesar_entrada(item, contador, lock):
     pdf_buffer.close()
     return True
 
+
+
+@app.route('/resultados')
+def listar_resultados():
+    page = int(request.args.get("page", 1))  # página actual
+    per_page = 20
+
+    resultados = get_all_paginated(page, per_page)
+    total = get_count()
+    total_pages = math.ceil(total / per_page)
+
+    return render_template("resultados.html",
+                           resultados=resultados,
+                           page=page,
+                           total_pages=total_pages)
+
+@app.route('/articulo/<id>')
+def ver_articulo(id):
+    articulo = get_by_id(id)
+    return render_template("articulo.html", articulo=articulo)
 
 @app.route('/downloads/<path:filename>')
 def serve_downloads(filename):
