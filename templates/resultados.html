@@ -17,7 +17,7 @@
     {% for item in resultados %}
         <div class="card">
             <h2>{{ item.titulo }}</h2>
-            <p><b>Fecha:</b> {{ item.fecha_publicacion }}</p>
+            <p><b>Fecha publicación:</b> {{ item.fecha_publicacion }}</p>
             <p><b>Autores:</b> {{ ", ".join(item.autores) }}</p>
             <p><b>Resumen:</b> {{ item.resumen }}</p>
 
@@ -46,4 +46,3 @@
     </div>
 </body>
 </html>
-    
