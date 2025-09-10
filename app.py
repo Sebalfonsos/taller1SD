@@ -13,6 +13,8 @@ from pdfextractor import extract_text_and_images
 import requests
 import io
 import math
+from inteligenciaArtificial import generar_keywords
+
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -71,6 +73,16 @@ def procesar_entrada(item, contador, lock):
     pdfdata = extract_text_and_images(pdf_buffer, item['rutacarpeta'])
     item['texto_extraido'] = pdfdata['texto']
     item['imagenes_extraidas'] = pdfdata['imagenes']
+
+    # 🔹 Generar keywords con IA
+    keywords = generar_keywords(
+        titulo=item['titulo'],
+        resumen=item['resumen'],
+        texto=item.get('texto_extraido', "")
+    )
+    item['keywords'] = keywords
+
+
     print(f"[PID: {pid}] Extracción completada. Guardando en DB...")
     guardarEntrada(item)
     pdf_buffer.close()
@@ -108,6 +120,13 @@ def obtener_progreso():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# def lanzar_procesos(elementos, contador, lock):
+#     with mp.Pool(processes=max_procesos) as pool:
+#         for elemento in elementos:
+#             pool.apply_async(procesar_entrada, args=(elemento, contador, lock))
+#         pool.close()
+#         pool.join()
 
 def lanzar_procesos(elementos, contador, lock):
     procesos = []
