@@ -33,7 +33,7 @@ def extract_text_and_images(pdf_path, output_folder="output"):
             image_paths.append(img_path)  # guardar la ruta en el array
 
     doc.close()
-    print(f"Extraction completed! Files saved in {output_folder}")
+    # print(f"Extraction completed! Files saved in {output_folder}")
 
     # Retornar un dict con texto + rutas de imágenes
     return {

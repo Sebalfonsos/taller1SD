@@ -16,12 +16,6 @@ import math
 from inteligenciaArtificial import generar_keywords
 
 
-
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from tqdm import tqdm
-import time
-
-
 with open("config.json", "r") as f:
     config = json.load(f)
 max_procesos = config["num_procesos"]
@@ -52,7 +46,7 @@ def almacenarEnMemoria(url):
 
 
 # Función que procesará cada elemento de la cola
-def procesar_entrada(item):
+def procesar_entrada(item, contador, lock):
     """Función que será ejecutada por cada proceso para procesar una entrada"""
     pid = os.getpid()
     
@@ -64,22 +58,21 @@ def procesar_entrada(item):
     # nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
     # ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
     
- 
-    # print(f"[PID: {pid}] Procesando en memoria...")
+    # print(f"[PID: {pid}] Ruta: {ruta_destino}")
+    print(f"[PID: {pid}] Procesando en memoria...")
 
     pdf_buffer = almacenarEnMemoria(item['pdf_url'])
     # Pasar tanto la URL como el nombre del archivo a la función de descarga
     # rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
-    
-    
+
+    with lock:  # evitar condiciones de carrera
+        contador.value += 1
 
     item['rutacarpeta'] = carpetaDestino
     # extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
-    if pdf_buffer:
-        pdfdata = extract_text_and_images(pdf_buffer, item['rutacarpeta'])
-        item['texto_extraido'] = pdfdata['texto']
-        item['imagenes_extraidas'] = pdfdata['imagenes']
-        pdf_buffer.close()
+    pdfdata = extract_text_and_images(pdf_buffer, item['rutacarpeta'])
+    item['texto_extraido'] = pdfdata['texto']
+    item['imagenes_extraidas'] = pdfdata['imagenes']
 
     # 🔹 Generar keywords con IA
     keywords = generar_keywords(
@@ -90,9 +83,9 @@ def procesar_entrada(item):
     item['keywords'] = keywords
 
 
-    # print(f"[PID: {pid}] Extracción completada. Guardando en DB...")
+    print(f"[PID: {pid}] Extracción completada. Guardando en DB...")
     guardarEntrada(item)
-    
+    pdf_buffer.close()
     return True
 
 
@@ -128,27 +121,27 @@ def obtener_progreso():
 def index():
     return render_template('index.html')
 
+# def lanzar_procesos(elementos, contador, lock):
+#     with mp.Pool(processes=max_procesos) as pool:
+#         for elemento in elementos:
+#             pool.apply_async(procesar_entrada, args=(elemento, contador, lock))
+#         pool.close()
+#         pool.join()
 
+def lanzar_procesos(elementos, contador, lock):
+    procesos = []
+    for elemento in elementos:
+        if len(procesos) >= max_procesos:
+            procesos[0].join()  # esperar que al menos uno termine
+            procesos.pop(0)
 
+        p = mp.Process(target=procesar_entrada, args=(elemento, contador, lock))
+        p.start()
+        procesos.append(p)
 
-def descargar_con_progreso(elementos, max_procesos=8, contador=None, lock=None):
-    """Descarga con barra de progreso"""
-    with ProcessPoolExecutor(max_workers=max_procesos) as executor:
-        futures = {executor.submit(procesar_entrada, elem): elem for elem in elementos}
-        
-        exitosos = 0
-        
-        with tqdm(total=len(elementos), desc="Procesando Entradas") as pbar:
-            for future in as_completed(futures):
-                if future.result():
-                    exitosos += 1
-                    with lock:  # evitar condiciones de carrera
-                        contador.value += 1
-                pbar.update(1)
-                pbar.set_postfix(exitosos=exitosos)
-                
-
-    return exitosos
+    # esperar a que todos terminen
+    for p in procesos:
+        p.join()
 
 
 @app.route('/enviar', methods=['POST'])
@@ -207,7 +200,7 @@ def recibir_datos():
         print(f"Cantidad de entradas: {cantidadTotalEntradas}")
 
         # Lanzar el procesamiento en segundo plano
-        mp.Process(target=descargar_con_progreso, args=(elementos, 8, contador, lock)).start()
+        mp.Process(target=lanzar_procesos, args=(elementos, contador, lock)).start()
 
         # Responder inmediatamente
         return jsonify({
