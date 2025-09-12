@@ -1,13 +1,22 @@
 from flask import Flask, render_template, request, jsonify
+from flask import send_from_directory
 from datetime import datetime
 from descargar import descargar_archivo
 import os
 import xml.etree.ElementTree as ET
-from queue import Queue
 import multiprocessing as mp
 import json
 from sanitizar import sanitizar_nombre_archivo
-from dbmongo import guardarEntrada
+from dbmongo import guardarEntrada, get_all_paginated, get_count, get_by_id
+from pdfextractor import extract_text_and_images
+import requests
+import io
+import math
+from inteligenciaArtificial import generar_keywords
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
+
+
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -20,8 +29,26 @@ lock = mp.Lock()
 elementos = []
 procesos = []
 
+def almacenarEnMemoria(url):
+    try:
+        # Hacemos un HEAD primero para no bajar todo el PDF si no existe
+        head = requests.head(url, allow_redirects=True, timeout=10)
+        if head.status_code != 200:
+            print(f"⚠️ URL no válida (status {head.status_code}): {url}")
+            return None
+
+        # Si pasa, descargamos
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return io.BytesIO(response.content)
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error descargando {url}: {e}")
+        return None
+
+
 # Función que procesará cada elemento de la cola
-def procesar_entrada(item, contador, lock):
+def procesar_entrada(item):
     """Función que será ejecutada por cada proceso para procesar una entrada"""
     pid = os.getpid()
     
@@ -30,19 +57,64 @@ def procesar_entrada(item, contador, lock):
     
     carpetaDestino = os.path.join(item['rutacarpeta'], nombre_archivo_sanitizado)
     os.makedirs(carpetaDestino, exist_ok=True)
-    nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
-    ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
+    # nombre_archivo_sanitizado = f"{nombre_archivo_sanitizado}.pdf"
+    # ruta_destino = os.path.join(carpetaDestino, nombre_archivo_sanitizado)
     
-    print(f"[PID: {pid}] Ruta: {ruta_destino}")
-    
+ 
+    # print(f"[PID: {pid}] Procesando en memoria...")
+
+    pdf_buffer = almacenarEnMemoria(item['pdf_url'])
     # Pasar tanto la URL como el nombre del archivo a la función de descarga
-    rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
-    with lock:  # evitar condiciones de carrera
-        contador.value += 1
+    # rutaArchivoDescargado = descargar_archivo(item['pdf_url'], ruta_destino)
+    
+    
 
     item['rutacarpeta'] = carpetaDestino
+    # extract_text_and_images(rutaArchivoDescargado, carpetaDestino)
+    if pdf_buffer:
+        pdfdata = extract_text_and_images(pdf_buffer, item['rutacarpeta'])
+        item['texto_extraido'] = pdfdata['texto']
+        item['imagenes_extraidas'] = pdfdata['imagenes']
+        pdf_buffer.close()
+
+    # 🔹 Generar keywords con IA
+    keywords = generar_keywords(
+        titulo=item['titulo'],
+        resumen=item['resumen'],
+        texto=item.get('texto_extraido', "")
+    )
+    item['keywords'] = keywords
+
+
+    # print(f"[PID: {pid}] Extracción completada. Guardando en DB...")
     guardarEntrada(item)
+    
     return True
+
+
+
+@app.route('/resultados')
+def listar_resultados():
+    page = int(request.args.get("page", 1))  # página actual
+    per_page = 20
+
+    resultados = get_all_paginated(page, per_page)
+    total = get_count()
+    total_pages = math.ceil(total / per_page)
+
+    return render_template("resultados.html",
+                           resultados=resultados,
+                           page=page,
+                           total_pages=total_pages)
+
+@app.route('/articulo/<id>')
+def ver_articulo(id):
+    articulo = get_by_id(id)
+    return render_template("articulo.html", articulo=articulo)
+
+@app.route('/downloads/<path:filename>')
+def serve_downloads(filename):
+    return send_from_directory("downloads", filename)
 
 @app.route('/progreso')
 def obtener_progreso():
@@ -52,20 +124,27 @@ def obtener_progreso():
 def index():
     return render_template('index.html')
 
-def lanzar_procesos(elementos, contador, lock):
-    procesos = []
-    for elemento in elementos:
-        if len(procesos) >= max_procesos:
-            procesos[0].join()  # esperar que al menos uno termine
-            procesos.pop(0)
 
-        p = mp.Process(target=procesar_entrada, args=(elemento, contador, lock))
-        p.start()
-        procesos.append(p)
 
-    # esperar a que todos terminen
-    for p in procesos:
-        p.join()
+
+def descargar_con_progreso(elementos, max_procesos=8, contador=None, lock=None):
+    """Descarga con barra de progreso"""
+    with ProcessPoolExecutor(max_workers=max_procesos) as executor:
+        futures = {executor.submit(procesar_entrada, elem): elem for elem in elementos}
+        
+        exitosos = 0
+        
+        with tqdm(total=len(elementos), desc="Procesando Entradas") as pbar:
+            for future in as_completed(futures):
+                if future.result():
+                    exitosos += 1
+                    with lock:  # evitar condiciones de carrera
+                        contador.value += 1
+                pbar.update(1)
+                pbar.set_postfix(exitosos=exitosos)
+                
+
+    return exitosos
 
 
 @app.route('/enviar', methods=['POST'])
@@ -124,7 +203,7 @@ def recibir_datos():
         print(f"Cantidad de entradas: {cantidadTotalEntradas}")
 
         # Lanzar el procesamiento en segundo plano
-        mp.Process(target=lanzar_procesos, args=(elementos, contador, lock)).start()
+        mp.Process(target=descargar_con_progreso, args=(elementos, max_procesos, contador, lock)).start()
 
         # Responder inmediatamente
         return jsonify({

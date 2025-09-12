@@ -5,8 +5,13 @@ def extract_text_and_images(pdf_path, output_folder="output"):
     # Crear carpeta si no existe
     os.makedirs(output_folder, exist_ok=True)
     
-    doc = fitz.open(pdf_path)
-    all_text = []  # acumulador de texto
+    if isinstance(pdf_path, str):
+        doc = fitz.open(pdf_path)
+    else:  # BytesIO
+        doc = fitz.open(stream=pdf_path, filetype="pdf")
+    
+    all_text = []            # acumulador de texto
+    image_paths = []         # acumulador de rutas de imágenes
 
     # Extraer texto e imágenes página por página
     for page_num, page in enumerate(doc, start=1):
@@ -21,15 +26,17 @@ def extract_text_and_images(pdf_path, output_folder="output"):
             image_bytes = base_image["image"]
             image_ext = base_image["ext"]  # 'png' o 'jpeg'
             
-            with open(os.path.join(output_folder, f"page_{page_num}_img_{img_index}.{image_ext}"), "wb") as f:
+            img_path = os.path.join(output_folder, f"page_{page_num}_img_{img_index}.{image_ext}")
+            with open(img_path, "wb") as f:
                 f.write(image_bytes)
 
-    # Guardar todo el texto en un solo archivo
-    with open(os.path.join(output_folder, "all_text.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(all_text))
+            image_paths.append(img_path)  # guardar la ruta en el array
 
     doc.close()
-    print(f"Extraction completed! Files saved in {output_folder}")
+    # print(f"Extraction completed! Files saved in {output_folder}")
 
-# Ejemplo de uso
-extract_text_and_images("example.pdf")
+    # Retornar un dict con texto + rutas de imágenes
+    return {
+        "texto": "\n".join(all_text),
+        "imagenes": image_paths
+    }
