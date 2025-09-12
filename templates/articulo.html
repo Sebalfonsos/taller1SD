@@ -17,12 +17,7 @@
     <h2>Texto completo</h2>
     <pre style="white-space: pre-wrap;">{{ articulo.texto_extraido }}</pre>
 
-    {% if articulo.imagenes_extraidas %}
-        <h2>Imágenes</h2>
-        {% for img in articulo.imagenes_extraidas %}
-            <img src="{{ img.replace('downloads', '/downloads') }}">
-        {% endfor %}
-    {% endif %}
+    
 
     <p><a href="{{ url_for('listar_resultados') }}">⬅ Volver a resultados</a></p>
 </body>
