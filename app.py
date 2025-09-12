@@ -4,7 +4,6 @@ from datetime import datetime
 from descargar import descargar_archivo
 import os
 import xml.etree.ElementTree as ET
-from queue import Queue
 import multiprocessing as mp
 import json
 from sanitizar import sanitizar_nombre_archivo
@@ -14,12 +13,9 @@ import requests
 import io
 import math
 from inteligenciaArtificial import generar_keywords
-
-
-
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
-import time
+
 
 
 with open("config.json", "r") as f:
@@ -207,7 +203,7 @@ def recibir_datos():
         print(f"Cantidad de entradas: {cantidadTotalEntradas}")
 
         # Lanzar el procesamiento en segundo plano
-        mp.Process(target=descargar_con_progreso, args=(elementos, 8, contador, lock)).start()
+        mp.Process(target=descargar_con_progreso, args=(elementos, max_procesos, contador, lock)).start()
 
         # Responder inmediatamente
         return jsonify({
